@@ -141,10 +141,10 @@ def train(training_data_filenames, output_dir, test_indices_filename=None, num_e
     # generate predicitons
     aff_pred,err_pred = lasagne.layers.get_output(networkAff,networkErr)
     # get loss and update expressions
-    lossAff = lasagne.objectives.squared_error(aff_pred, target_var)
+    lossAff1 = lasagne.objectives.squared_error(aff_pred, target_var)
     lossErr = lasagne.objectives.squared_error(err_pred, error_var)
     
-    lossAff = lasagne.objectives.aggregate(lossAff, weights=T.gt(target_var, 0), mode='normalized_sum')
+    lossAff2 = lasagne.objectives.aggregate(lossAff, weights=T.gt(target_var, 0), mode='normalized_sum')
     lossErr = lasagne.objectives.aggregate(lossErr, weights=T.gt(error_var, 0), mode='normalized_sum')
 
     paramsAff = lasagne.layers.get_all_params(networkAff, trainable=True)
@@ -154,7 +154,8 @@ def train(training_data_filenames, output_dir, test_indices_filename=None, num_e
     updatesErr = lasagne.updates.nesterov_momentum(lossErr, paramsErr, learning_rate=learning_rate, momentum=momentum)
 
     # compile training function
-    train_fnAff = theano.function([input_var, target_var], lossAff, updates=updatesAff)
+    train_fnAff = theano.function([input_var, target_var], (lossAff1,lossAff2), updates=updatesAff)
+    # returns tuple with (matrixOfErrors,meanError)
     train_fnErr = theano.function([input_var, error_var], lossErr, updates=updatesErr)
 
     # get test/validation
@@ -182,14 +183,11 @@ def train(training_data_filenames, output_dir, test_indices_filename=None, num_e
         #train affinity
         for inputs, targets in iterate_minibatches(X_train, y_train, batch_size, shuffle=True):
             # train one epoch
-            train_err += train_fnAff(inputs, targets)
+            train_err_matrix, train_err_mean = train_fnAff(inputs,targets)
+            err_err += train_fnErr(inputs, train_err_matrix)
+            train_err += train_err_mean
             train_batches += 1
         
-        #train error
-        for inputs, targets in iterate_minibatches(X_train, train_err, batch_size, shuffle=True):
-            # train one epoch
-            err_err += train_fnErr(inputs, errors)
-            train_batches += 1
         train_err = train_err / train_batches
         err_err = err_err / train_batches
         #_____________________________________
