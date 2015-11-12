@@ -44,6 +44,9 @@ def get_train_test_indices(num_compounds, train_percentage=TRAIN_PERCENTAGE, ran
     shuffled_indices = np.arange(num_compounds) #array of length(num_compounds). Defines the array
     rng.shuffle(shuffled_indices)
     train_indices = shuffled_indices[:int(num_compounds * train_percentage)]
+    # to create a small train/test set. below returns a test set equal in size to the train set. Note that if
+    # TRAIN_PERCENTAGE > 0.5, this will return redundant data
+    #test_indices = shuffled_indices[(num_compounds - num_compounds * train_percentage):]
     test_indices = shuffled_indices[int(num_compounds * train_percentage):]
     return train_indices, test_indices
 
