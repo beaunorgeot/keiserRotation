@@ -186,6 +186,7 @@ def train(training_data_filenames, output_dir, test_indices_filename=None, num_e
         #train affinity
         for inputs, targets in iterate_minibatches(X_train, y_train, batch_size, shuffle=True):
             # train one epoch
+            # Todo: Mike only wants magnitude of error, I think the easiest way to do this is just abs(train_fnAff(etc,etc))
             train_err_matrix, train_err_mean = train_fnAff(inputs,targets)
             err_err += train_fnErr(inputs, train_err_matrix)
             train_err += train_err_mean
