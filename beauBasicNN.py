@@ -142,18 +142,19 @@ def train(training_data_filenames, output_dir, test_indices_filename=None, num_e
     #y_train is a vector with 1 value for the affinity for each target a molecule bound to
 
     # generate predicitons
-    aff_pred,err_pred = lasagne.layers.get_output(networkAff,networkErr)
+    aff_pred = lasagne.layers.get_output(networkAff)
+    err_pred = lasagne.layers.get_output(networkErr)
     # get loss and update expressions
     lossAff1 = lasagne.objectives.squared_error(aff_pred, target_var)
     lossErr = lasagne.objectives.squared_error(err_pred, error_var)
     
-    lossAff2 = lasagne.objectives.aggregate(lossAff, weights=T.gt(target_var, 0), mode='normalized_sum')
+    lossAff2 = lasagne.objectives.aggregate(lossAff1, weights=T.gt(target_var, 0), mode='normalized_sum')
     lossErr = lasagne.objectives.aggregate(lossErr, weights=T.gt(error_var, 0), mode='normalized_sum')
 
     paramsAff = lasagne.layers.get_all_params(networkAff, trainable=True)
     paramsErr = lasagne.layers.get_all_params(networkErr, trainable=True)
 
-    updatesAff = lasagne.updates.nesterov_momentum(lossAff, paramsAff, learning_rate=learning_rate, momentum=momentum)
+    updatesAff = lasagne.updates.nesterov_momentum(lossAff2, paramsAff, learning_rate=learning_rate, momentum=momentum)
     updatesErr = lasagne.updates.nesterov_momentum(lossErr, paramsErr, learning_rate=learning_rate, momentum=momentum)
 
     # compile training function
@@ -162,14 +163,15 @@ def train(training_data_filenames, output_dir, test_indices_filename=None, num_e
     train_fnErr = theano.function([input_var, error_var], lossErr, updates=updatesErr)
 
     # get test/validation
-    test_prediction = lasagne.layers.get_output(network, deterministic=True)
+    test_prediction = lasagne.layers.get_output(networkAff, deterministic=True)
     test_loss = lasagne.objectives.squared_error(test_prediction, target_var)
-    test_loss = lasagne.objectives.aggregate(test_loss, T.gt(target_var, 0), mode='mean')
+    test_loss_mean = lasagne.objectives.aggregate(test_loss, T.gt(target_var, 0), mode='mean')
 
     ## note: test_acc is ommitted b/c it was with respect to softmax classification
 
     # compile test/validation function
-    val_fn = theano.function([input_var, target_var], test_loss)
+    val_fn = theano.function([input_var, target_var], (test_loss,test_loss_mean))
+    val_err_fn = theano.function([input_var, error_var], lossErr)
     val_errs = []
     train_errs = []
 
@@ -197,23 +199,27 @@ def train(training_data_filenames, output_dir, test_indices_filename=None, num_e
         #_____________________________________
         # And a full pass over the validation data:
         val_err = 0
+        val_err_err = 0 
         val_batches = 0
         for inputs, targets in iterate_minibatches(X_val, y_val, batch_size, shuffle=False):
-            err = val_fn(inputs, targets)
+            err_matrix, err = val_fn(inputs, targets)
+            val_err_err = val_err_fn(inputs,err_matrix) #inputs are the fingerPrints, the inputs for the training
             val_err += err
+            val_err_err += err_err
             val_batches += 1
         val_err = val_err / val_batches
         # Then we print the results for this epoch:
         logging.info("Epoch {} of {} took {:.3f}s".format(epoch + 1, num_epochs, time.time() - start_time))
         logging.info("  training loss:\t\t{:.9f}".format(train_err))
         logging.info("  validation loss:\t\t{:.9f}".format(val_err))
+        logging.info("  error_error:\t\t{:.9f}".format(err_err))
         train_errs.append(train_err)
         val_errs.append(val_err)
 
         # Optionally, you could now dump the network weights to a file like this:
         if epoch % 10 == 0 or epoch == num_epochs - 1:
             np.savez(output_dir + '/model_at_epoch_{}.npz'.format(epoch),
-                     *lasagne.layers.get_all_param_values(network))
+                     *lasagne.layers.get_all_param_values(networkAff))
 
     np.savetxt(os.path.join(output_dir, 'train_errors.csv'), np.asarray(train_errs), delimiter=',')
     np.savetxt(os.path.join(output_dir, 'test_errors.csv'), np.asarray(val_errs), delimiter=',')
