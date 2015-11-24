@@ -22,7 +22,7 @@ import common.pickled_data_loader as pdl
 TRAIN_PERCENTAGE = .9
 BATCH_SIZE = 100  # larger=faster epochs; smaller=better loss/epoch
 NUM_EPOCHS = 500
-LEARNING_RATE = 0.1
+LEARNING_RATE = 0.001
 MOMENTUM = 0.9
 
 HIDDEN_LAYERS = [
@@ -147,9 +147,13 @@ def train(training_data_filenames, output_dir, test_indices_filename=None, num_e
     # get loss and update expressions
     lossAff1 = lasagne.objectives.squared_error(aff_pred, target_var)
     lossErr = lasagne.objectives.squared_error(err_pred, error_var)
+
+    masked_targets = T.gt(target_var, 0)
     
-    lossAff2 = lasagne.objectives.aggregate(lossAff1, weights=T.gt(target_var, 0), mode='normalized_sum')
-    lossErr = lasagne.objectives.aggregate(lossErr, weights=T.gt(error_var, 0), mode='normalized_sum')
+    lossAff2 = lasagne.objectives.aggregate(lossAff1, weights=masked_targets, mode='normalized_sum')
+    lossErr = lasagne.objectives.aggregate(lossErr, weights=T.gt(error_var, 0), mode='normalized_sum') 
+    # T.gt() is t.GreaterThan. returns array of the same shape as target var of booleans. Takes loss function and multiplies it by the weights. 0's if
+    # there is no affinity to predict. 
 
     paramsAff = lasagne.layers.get_all_params(networkAff, trainable=True)
     paramsErr = lasagne.layers.get_all_params(networkErr, trainable=True)
@@ -157,8 +161,10 @@ def train(training_data_filenames, output_dir, test_indices_filename=None, num_e
     updatesAff = lasagne.updates.nesterov_momentum(lossAff2, paramsAff, learning_rate=learning_rate, momentum=momentum)
     updatesErr = lasagne.updates.nesterov_momentum(lossErr, paramsErr, learning_rate=learning_rate, momentum=momentum)
 
+    updated_weights = lossAff1 * masked_targets
+
     # compile training function
-    train_fnAff = theano.function([input_var, target_var], (lossAff1,lossAff2), updates=updatesAff)
+    train_fnAff = theano.function([input_var, target_var], (updated_weights,lossAff2), updates=updatesAff)
     # returns tuple with (matrixOfErrors,meanError)
     train_fnErr = theano.function([input_var, error_var], lossErr, updates=updatesErr)
 
@@ -189,6 +195,8 @@ def train(training_data_filenames, output_dir, test_indices_filename=None, num_e
         for inputs, targets in iterate_minibatches(X_train, y_train, batch_size, shuffle=True):
             # train one epoch
             # Todo: Mike only wants magnitude of error, I think the easiest way to do this is just abs(train_fnAff(etc,etc))
+            # Note: there's no need for abs() because ReLU ensures that all predictions are positive, and our loss function for
+            # both affinity and error is mean-squared error. So there will never be negative numbers.
             train_err_matrix, train_err_mean = train_fnAff(inputs,targets)
             err_err += train_fnErr(inputs, train_err_matrix)
             train_err += train_err_mean
