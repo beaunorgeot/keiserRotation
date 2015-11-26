@@ -226,8 +226,34 @@ def train(training_data_filenames, output_dir, test_indices_filename=None, num_e
 
         # Optionally, you could now dump the network weights to a file like this:
         if epoch % 10 == 0 or epoch == num_epochs - 1:
-            np.savez(output_dir + '/model_at_epoch_{}.npz'.format(epoch),
+            np.savez(output_dir + '/aff_model_at_epoch_{}.npz'.format(epoch),
                      *lasagne.layers.get_all_param_values(networkAff))
+            np.savez(output_dir + '/err_model_at_epoch_{}.npz'.format(epoch),
+                     *lasagne.layers.get_all_param_values(networkErr)) 
+
+    # GET STATISTICS
+    #first recombining test/train matrices into fp and affinity
+    #X_train, y_train, X_val, Y_val
+    fingerprints = np.vstack(X_train,X_val)
+    compound_target_affinity = np.vstack(y_train,Y_val)
+    #get the indices for np.nonzeros
+    nonzeros = np.nonzeros(fingerprints)
+    #compound_ids, target_ids
+
+    #generate predictions for each network
+    predictionAff = rnn.run_nn(fingerprints, network=networkAff)
+    predictionErr = rnn.run_nn(fingerprints, network=networkErr)
+
+    #calculate and plot r2
+    r2aff = 1 - nnr.compute_rsquared(predictionAff[nonzeros], compound_target_affinity[nonzeros],
+                                  output_dir=output_path, result_name='r2Aff')
+    r2Affplot = 1 - nnr.plot_rsquared(predictionAff[nonzeros], compound_target_affinity[nonzeros],
+                                  img_filename=output_dir + '/r2Affplot.png')
+
+    r2err = 1 - nnr.compute_rsquared(predictionErr[nonzeros], compound_target_affinity[nonzeros],
+                                  output_dir=output_path, result_name='r2err')
+    r2Errplot = 1 - nnr.plot_rsquared(predictionErr[nonzeros], compound_target_affinity[nonzeros],
+                                  img_filename=output_dir + '/r2Errplot.png')
 
     np.savetxt(os.path.join(output_dir, 'train_errors.csv'), np.asarray(train_errs), delimiter=',')
     np.savetxt(os.path.join(output_dir, 'test_errors.csv'), np.asarray(val_errs), delimiter=',')
