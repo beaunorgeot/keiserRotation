@@ -237,28 +237,59 @@ def train(training_data_filenames, output_dir, test_indices_filename=None, num_e
     fingerprints = np.vstack(X_train,X_val)
     compound_target_affinity = np.vstack(y_train,Y_val)
     #get the indices for np.nonzeros
-    nonzeros = np.nonzeros(fingerprints)
+    nonzeros = np.nonzeros(compound_target_affinity)
     #compound_ids, target_ids
 
     #generate predictions for each network
     predictionAff = rnn.run_nn(fingerprints, network=networkAff)
     predictionErr = rnn.run_nn(fingerprints, network=networkErr)
 
-    #calculate and plot r2
-    r2aff = 1 - nnr.compute_rsquared(predictionAff[nonzeros], compound_target_affinity[nonzeros],
+
+    #calculate and plot r2 for complete chembl20
+    nnr.compute_rsquared(predictionAff[nonzeros], compound_target_affinity[nonzeros],
                                   output_dir=output_path, result_name='r2Aff')
-    r2Affplot = 1 - nnr.plot_rsquared(predictionAff[nonzeros], compound_target_affinity[nonzeros],
+    nnr.plot_rsquared(predictionAff[nonzeros], compound_target_affinity[nonzeros],
                                   img_filename=output_dir + '/r2Affplot.png')
 
-    r2err = 1 - nnr.compute_rsquared(predictionErr[nonzeros], compound_target_affinity[nonzeros],
+    nnr.compute_rsquared(predictionErr[nonzeros], compound_target_affinity[nonzeros],
                                   output_dir=output_path, result_name='r2err')
-    r2Errplot = 1 - nnr.plot_rsquared(predictionErr[nonzeros], compound_target_affinity[nonzeros],
+    nnr.plot_rsquared(predictionErr[nonzeros], compound_target_affinity[nonzeros],
                                   img_filename=output_dir + '/r2Errplot.png')
 
     np.savetxt(os.path.join(output_dir, 'train_errors.csv'), np.asarray(train_errs), delimiter=',')
     np.savetxt(os.path.join(output_dir, 'test_errors.csv'), np.asarray(val_errs), delimiter=',')
     nnr.plot_error(train_errs, title="Train Errors", filename=os.path.join(output_dir, 'train_errors.png'))
     nnr.plot_error(val_errs, title="Test Errors", filename=os.path.join(output_dir, 'test_errors.png'))
+
+# get r^2 just for testing data:
+    
+    #get the indices for np.nonzeros
+    nonzeros = np.nonzeros(y_val)
+    #compound_ids, target_ids
+
+    #generate predictions for each network
+    predictionAff = rnn.run_nn(X_val, network=networkAff)
+    predictionErr = rnn.run_nn(y_val, network=networkErr)
+    compound_target_affinity = y_val
+
+    #calculate and plot r2 for complete chembl20
+    nnr.compute_rsquared(predictionAff[nonzeros], compound_target_affinity[nonzeros],
+                                  output_dir=output_path, result_name='r2AffVal')
+    nnr.plot_rsquared(predictionAff[nonzeros], compound_target_affinity[nonzeros],
+                                  img_filename=output_dir + '/r2AffValplot.png')
+
+    nnr.compute_rsquared(predictionErr[nonzeros], compound_target_affinity[nonzeros],
+                                  output_dir=output_path, result_name='r2errVal')
+    nnr.plot_rsquared(predictionErr[nonzeros], compound_target_affinity[nonzeros],
+                                  img_filename=output_dir + '/r2ErrValplot.png')
+
+    
+
+
+#generate predictions for validation set:
+# optimization: change predictionAff etc to using this format instead of calling rnn.run_nn as doing above on lines 244
+#predictionAff_fn = theano.function([input_var], predictionAff)
+#predictionErr_fn = theano.function([input_var], predictionErr)
 
 
 def main(argv=sys.argv[1:]):
