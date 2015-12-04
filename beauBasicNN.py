@@ -148,8 +148,9 @@ def train(training_data_filenames, output_dir, test_indices_filename=None, num_e
     lossAff1 = lasagne.objectives.squared_error(aff_pred, target_var)
     lossErr = lasagne.objectives.squared_error(err_pred, error_var)
 
-    masked_targets = T.gt(target_var, 0)
-    
+    masked_Aff_targets = T.gt(target_var, 0) #gt for GreaterThan >
+    masked_Err_targets = T.gt(error_var, 0) 
+
     lossAff2 = lasagne.objectives.aggregate(lossAff1, weights=masked_targets, mode='normalized_sum')
     lossErr = lasagne.objectives.aggregate(lossErr, weights=T.gt(error_var, 0), mode='normalized_sum') 
     # T.gt() is t.GreaterThan. returns array of the same shape as target var of booleans. Takes loss function and multiplies it by the weights. 0's if
@@ -161,17 +162,24 @@ def train(training_data_filenames, output_dir, test_indices_filename=None, num_e
     updatesAff = lasagne.updates.nesterov_momentum(lossAff2, paramsAff, learning_rate=learning_rate, momentum=momentum)
     updatesErr = lasagne.updates.nesterov_momentum(lossErr, paramsErr, learning_rate=learning_rate, momentum=momentum)
 
-    updated_weights = lossAff1 * masked_targets
+    updated_Aff_weights = lossAff1 * masked_Aff_targets
+    updated_Err_weights = lossErr * masked_Err_targets
 
     # compile training function
     train_fnAff = theano.function([input_var, target_var], (updated_weights,lossAff2), updates=updatesAff)
     # returns tuple with (matrixOfErrors,meanError)
     train_fnErr = theano.function([input_var, error_var], lossErr, updates=updatesErr)
 
-    # get test/validation
-    test_prediction = lasagne.layers.get_output(networkAff, deterministic=True)
-    test_loss = lasagne.objectives.squared_error(test_prediction, target_var)
-    test_loss_mean = lasagne.objectives.aggregate(test_loss, T.gt(target_var, 0), mode='mean')
+    # get predictions and loss for aff
+    test_prediction_aff = lasagne.layers.get_output(networkAff, deterministic=True)
+    test_loss_aff = lasagne.objectives.squared_error(test_prediction_aff, target_var)
+    test_loss_mean_aff = lasagne.objectives.aggregate(test_loss_aff, T.gt(target_var, 0), mode='mean')
+    
+    # get predictions and loss for err
+    test_prediction_err = lasagne.layers.get_output(networkErr, deterministic=True)
+    #get the squared error between the error prediction and magnitude of the true error
+    test_loss_err = lasagne.objectives.squared_error(test_prediction_err, abs(test_prediction_aff - target_var))
+    test_loss_mean_err = lasagne.objectives.aggregate(test_loss_err, T.gt(error_var, 0), mode='mean')
 
     ## note: test_acc is ommitted b/c it was with respect to softmax classification
 
@@ -194,7 +202,6 @@ def train(training_data_filenames, output_dir, test_indices_filename=None, num_e
         #train affinity
         for inputs, targets in iterate_minibatches(X_train, y_train, batch_size, shuffle=True):
             # train one epoch
-            # Todo: Mike only wants magnitude of error, I think the easiest way to do this is just abs(train_fnAff(etc,etc))
             # Note: there's no need for abs() because ReLU ensures that all predictions are positive, and our loss function for
             # both affinity and error is mean-squared error. So there will never be negative numbers.
             train_err_matrix, train_err_mean = train_fnAff(inputs,targets)
